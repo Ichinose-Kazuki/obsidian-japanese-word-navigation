@@ -7,21 +7,58 @@ const segmenter = new Intl.Segmenter("ja", { granularity: "word" });
 // 前の単語境界を算出
 const getPrevBoundary = (doc: Text, head: number): number => {
     const line = doc.lineAt(head);
-    if (head === line.from) return Math.max(0, head - 1); // 行頭の場合は前の行へ
+    if (head === line.from) return Math.max(0, head - 1);
+
     const textBefore = line.text.slice(0, head - line.from);
     const segments = Array.from(segmenter.segment(textBefore));
-    const last = segments[segments.length - 1];
-    return last ? head - last.segment.length : head;
+    if (segments.length === 0) return line.from;
+
+    let i = segments.length - 1;
+
+    // 1. 直前の連続する非単語（空白・記号）をすべてスキップ
+    while (i >= 0 && !segments[i]?.isWordLike) {
+        i--;
+    }
+
+    // 2. その手前にある1単語（1セグメント）をスキップ
+    if (i >= 0 && segments[i]?.isWordLike) {
+        i--;
+    }
+
+    const targetSegment = segments[i + 1];
+    return targetSegment ? line.from + targetSegment.index : line.from;
 };
 
 // 次の単語境界を算出
 const getNextBoundary = (doc: Text, head: number): number => {
     const line = doc.lineAt(head);
-    if (head === line.to) return Math.min(doc.length, head + 1); // 行末の場合は次の行へ
+    if (head === line.to) return Math.min(doc.length, head + 1);
+
     const textAfter = line.text.slice(head - line.from);
     const segments = Array.from(segmenter.segment(textAfter));
-    const first = segments[0];
-    return first ? head + first.segment.length : head;
+    if (segments.length === 0) return head;
+
+    let i = 0;
+
+    if (segments[i]?.isWordLike) {
+        // 直後が単語の場合：1単語進み、さらに続く非単語（空白など）もまとめてスキップ
+        i++;
+        while (i < segments.length && !segments[i]?.isWordLike) {
+            i++;
+        }
+    } else {
+        // 直後が非単語の場合：連続する非単語のみをまとめてスキップ
+        while (i < segments.length && !segments[i]?.isWordLike) {
+            i++;
+        }
+    }
+
+    let offset = 0;
+    for (let j = 0; j < i; j++) {
+        offset += segments[j]?.segment.length || 0;
+    }
+
+    return offset > 0 ? head + offset : head + (segments[0]?.segment.length || 1);
 };
 
 // 移動・選択処理

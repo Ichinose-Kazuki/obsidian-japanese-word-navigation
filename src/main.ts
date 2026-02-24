@@ -1,99 +1,51 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import { Plugin } from "obsidian";
+import { Prec } from "@codemirror/state";
+import { keymap, EditorView } from "@codemirror/view";
 
-// Remember to rename these classes and interfaces!
+// 日本語・単語単位のセグメンター初期化
+const segmenter = new Intl.Segmenter("ja", { granularity: "word" });
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+// 削除処理のコアロジック
+const deleteCjkWord = (view: EditorView): boolean => {
+    const state = view.state;
+    const { head, empty } = state.selection.main;
 
-	async onload() {
-		await this.loadSettings();
+    // 範囲選択中、またはドキュメント先頭の場合はデフォルト処理に委譲
+    if (!empty || head === 0) return false;
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
+    const line = state.doc.lineAt(head);
+    const textBefore = line.text.slice(0, head - line.from);
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
+    // 行頭の場合はデフォルト処理に委譲
+    if (textBefore.length === 0) return false;
 
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
+    // カーソル前までの文字列をセグメント分割
+    const segments = Array.from(segmenter.segment(textBefore));
+    if (segments.length === 0) return false;
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
-			}
-		});
+    const lastSegment = segments[segments.length - 1];
+	if (!lastSegment) return false; // 追加
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+    // 対象範囲の削除トランザクションを発行
+    view.dispatch({
+        changes: { from: head - lastSegment.segment.length, to: head }
+    });
 
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
-		});
+    return true; // デフォルトの削除処理をブロック
+};
 
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+// プラグイン本体
+export default class CjkWordDeletePlugin extends Plugin {
+    async onload() {
+        // CodeMirror拡張としてキーマップを最優先(Prec.highest)で登録
+        this.registerEditorExtension(
+            Prec.highest(
+                keymap.of([{ key: "Mod-Backspace", run: deleteCjkWord }])
+            )
+        );
+    }
 
-	}
-
-	onunload() {
-	}
-
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
+    onunload() {
+        // ObsidianAPIによりEditorExtensionは自動クリーンアップされるため処理不要
+    }
 }

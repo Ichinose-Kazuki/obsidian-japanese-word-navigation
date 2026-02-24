@@ -1,51 +1,76 @@
 import { Plugin } from "obsidian";
-import { Prec } from "@codemirror/state";
+import { Prec, Text } from "@codemirror/state";
 import { keymap, EditorView } from "@codemirror/view";
 
-// 日本語・単語単位のセグメンター初期化
 const segmenter = new Intl.Segmenter("ja", { granularity: "word" });
 
-// 削除処理のコアロジック
-const deleteCjkWord = (view: EditorView): boolean => {
-    const state = view.state;
-    const { head, empty } = state.selection.main;
-
-    // 範囲選択中、またはドキュメント先頭の場合はデフォルト処理に委譲
-    if (!empty || head === 0) return false;
-
-    const line = state.doc.lineAt(head);
+// 前の単語境界を算出
+const getPrevBoundary = (doc: Text, head: number): number => {
+    const line = doc.lineAt(head);
+    if (head === line.from) return Math.max(0, head - 1); // 行頭の場合は前の行へ
     const textBefore = line.text.slice(0, head - line.from);
-
-    // 行頭の場合はデフォルト処理に委譲
-    if (textBefore.length === 0) return false;
-
-    // カーソル前までの文字列をセグメント分割
     const segments = Array.from(segmenter.segment(textBefore));
-    if (segments.length === 0) return false;
+    const last = segments[segments.length - 1];
+    return last ? head - last.segment.length : head;
+};
 
-    const lastSegment = segments[segments.length - 1];
-	if (!lastSegment) return false; // 追加
+// 次の単語境界を算出
+const getNextBoundary = (doc: Text, head: number): number => {
+    const line = doc.lineAt(head);
+    if (head === line.to) return Math.min(doc.length, head + 1); // 行末の場合は次の行へ
+    const textAfter = line.text.slice(head - line.from);
+    const segments = Array.from(segmenter.segment(textAfter));
+    const first = segments[0];
+    return first ? head + first.segment.length : head;
+};
 
-    // 対象範囲の削除トランザクションを発行
+// 移動・選択処理
+const moveCjk = (view: EditorView, forward: boolean, select: boolean): boolean => {
+    const { main } = view.state.selection;
+    const newHead = forward ? getNextBoundary(view.state.doc, main.head) : getPrevBoundary(view.state.doc, main.head);
+
+    if (newHead === main.head) return false;
+
     view.dispatch({
-        changes: { from: head - lastSegment.segment.length, to: head }
+        selection: { anchor: select ? main.anchor : newHead, head: newHead },
+        scrollIntoView: true
     });
+    return true;
+};
 
-    return true; // デフォルトの削除処理をブロック
+// 削除処理
+const deleteCjk = (view: EditorView, forward: boolean): boolean => {
+    const { main } = view.state.selection;
+    if (!main.empty) return false; // 範囲選択中はデフォルトの削除処理へ委譲
+
+    const newHead = forward ? getNextBoundary(view.state.doc, main.head) : getPrevBoundary(view.state.doc, main.head);
+
+    if (newHead === main.head) return false;
+
+    view.dispatch({
+        changes: { from: Math.min(main.head, newHead), to: Math.max(main.head, newHead) },
+        scrollIntoView: true
+    });
+    return true;
 };
 
 // プラグイン本体
-export default class CjkWordDeletePlugin extends Plugin {
+export default class CjkWordEditPlugin extends Plugin {
     async onload() {
-        // CodeMirror拡張としてキーマップを最優先(Prec.highest)で登録
         this.registerEditorExtension(
             Prec.highest(
-                keymap.of([{ key: "Mod-Backspace", run: deleteCjkWord }])
+                keymap.of([
+                    // 削除
+                    { key: "Mod-Backspace", run: (v) => deleteCjk(v, false) },
+                    { key: "Mod-Delete", run: (v) => deleteCjk(v, true) },
+                    // 移動
+                    { key: "Mod-ArrowLeft", run: (v) => moveCjk(v, false, false) },
+                    { key: "Mod-ArrowRight", run: (v) => moveCjk(v, true, false) },
+                    // 選択
+                    { key: "Shift-Mod-ArrowLeft", run: (v) => moveCjk(v, false, true) },
+                    { key: "Shift-Mod-ArrowRight", run: (v) => moveCjk(v, true, true) }
+                ])
             )
         );
-    }
-
-    onunload() {
-        // ObsidianAPIによりEditorExtensionは自動クリーンアップされるため処理不要
     }
 }

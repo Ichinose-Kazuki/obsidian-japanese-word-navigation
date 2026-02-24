@@ -16,6 +16,7 @@
 
 実装の簡単な説明
 - 単語境界の判定には Obsidian（Chrome/Electron環境）に標準搭載されている `Intl.Segmenter` を利用
+- `isWordLike` を使って半角スペース等が入っていても一単語として扱っている。加えて、アンダースコア `_` も同様の扱いをしている。
 - CodeMirror の `keymap.of` を用いてキーバインドに関数を登録
 
 --

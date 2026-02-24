@@ -10,7 +10,8 @@ const getPrevBoundary = (doc: Text, head: number): number => {
     if (head === line.from) return Math.max(0, head - 1);
 
     const textBefore = line.text.slice(0, head - line.from);
-    const segments = Array.from(segmenter.segment(textBefore));
+    // アンダースコアを半角スペースに置換してセグメント分割
+    const segments = Array.from(segmenter.segment(textBefore.replace(/_/g, " ")));
     if (segments.length === 0) return line.from;
 
     let i = segments.length - 1;
@@ -35,7 +36,8 @@ const getNextBoundary = (doc: Text, head: number): number => {
     if (head === line.to) return Math.min(doc.length, head + 1);
 
     const textAfter = line.text.slice(head - line.from);
-    const segments = Array.from(segmenter.segment(textAfter));
+    // アンダースコアを半角スペースに置換してセグメント分割
+    const segments = Array.from(segmenter.segment(textAfter.replace(/_/g, " ")));
     if (segments.length === 0) return head;
 
     let i = 0;

@@ -1,9 +1,9 @@
 {
-	"id": "japanese-segmenter",
-	"name": "Japanese Segmenter",
+	"id": "japanese-word-navigator",
+	"name": "Japanese Word Navigator",
 	"version": "1.0.0",
 	"minAppVersion": "1.11.7",
-	"description": "Defines some keybindings to utilize Japanese segmentor",
+	"description": "VSCode みたいな単語単位の移動・削除・選択を可能にするプラグイン",
 	"author": "Kazuki Ichinose",
 	"authorUrl": "",
 	"isDesktopOnly": false

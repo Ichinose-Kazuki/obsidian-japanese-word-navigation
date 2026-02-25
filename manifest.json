@@ -1,7 +1,7 @@
 {
 	"id": "japanese-word-navigator",
 	"name": "Japanese Word Navigator",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "1.11.7",
 	"description": "VSCode みたいな単語単位の移動・削除・選択を可能にするプラグイン",
 	"author": "Kazuki Ichinose",

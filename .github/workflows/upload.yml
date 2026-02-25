@@ -15,6 +15,7 @@ on:
           - 'manifest.json'
           - 'style.css'
           - 'versions.json'
+    workflow_dispatch:
 
 
 jobs:
